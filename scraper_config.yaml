@@ -114,3 +114,22 @@ chunker:
 
   # Discard chunks shorter than this many tokens (noise filter)
   min_chunk_tokens: 20
+
+# ------------------------------------------------------------------
+# Embedder settings
+# ------------------------------------------------------------------
+embedder:
+  # Input: the chunks.jsonl produced by chunk.py
+  input_file: "scraped_docs/chunks.jsonl"
+
+  # Chroma vector DB directory
+  db_path: "vector_db"
+
+  # Chroma collection name
+  collection: "docs"
+
+  # sentence-transformers model (free, runs on CPU, ~130 MB download)
+  model: "BAAI/bge-small-en-v1.5"
+
+  # Chunks to encode per batch
+  batch_size: 64

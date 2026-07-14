@@ -1,4 +1,4 @@
-﻿# Doc Chatbot — RAG Pipeline
+# Doc Chatbot — RAG Pipeline
 
 A modular pipeline that turns documentation websites into embedding-ready chunks for a RAG chatbot.
 
@@ -6,7 +6,7 @@ A modular pipeline that turns documentation websites into embedding-ready chunks
 Web Pages  -->  [Scraper]  -->  clean_text/*.md  -->  [Chunker]  -->  chunks.jsonl  -->  [Embedder -> Vector DB -> LLM]
 ```
 
-**Done:** Scraper + Chunker | **Next:** Embedder -> Vector DB -> Chat API
+**Done:** Scraper + Chunker + Embedder + Vector DB | **Next:** Chat API -> Frontend
 
 ---
 
@@ -16,10 +16,11 @@ Web Pages  -->  [Scraper]  -->  clean_text/*.md  -->  [Chunker]  -->  chunks.jso
 2. [Quick Start](#quick-start)
 3. [Stage 1 — Scraper](#stage-1--scraper)
 4. [Stage 2 — Chunker](#stage-2--chunker)
-5. [Configuration Reference](#configuration-reference)
-6. [Output File Formats](#output-file-formats)
-7. [Dependencies](#dependencies)
-8. [Roadmap](#roadmap)
+5. [Stage 3+4 — Embedder & Vector DB](#stage-34--embedder--vector-db)
+6. [Configuration Reference](#configuration-reference)
+7. [Output File Formats](#output-file-formats)
+8. [Dependencies](#dependencies)
+9. [Roadmap](#roadmap)
 
 ---
 
@@ -30,7 +31,9 @@ Doc Chatbot/
 |
 +-- main.py                  # Scraper CLI entry point
 +-- chunk.py                 # Chunker CLI entry point
-+-- scraper_config.yaml      # Unified config for scraper + chunker
++-- embed.py                 # Embedder CLI entry point
++-- test_retrieval.py        # Retrieval quality test (3 topic areas)
++-- scraper_config.yaml      # Unified config for all stages
 +-- requirements.txt         # All Python dependencies
 +-- urls.txt                 # (optional) URL list for the scraper
 |
@@ -48,12 +51,19 @@ Doc Chatbot/
 |   +-- splitter.py          # Two-pass LangChain chunking pipeline
 |   +-- storage.py           # Write ChunkRecord -> chunks.jsonl; URL lookup
 |
-+-- scraped_docs/            # All generated output (add to .gitignore)
-    +-- clean_text/          # One .md file per scraped page
-    +-- raw_html/            # Raw HTML snapshots (for debugging)
-    +-- chunks.jsonl         # Chunker output -- one JSON line per chunk
-    +-- manifest.json        # Scraper run log -- one entry per URL
-    +-- scraper.log          # Full debug log
++-- embedder/                # Embedder package
+|   +-- __init__.py          # Public API: encode_passages, encode_query, get_collection, ...
+|   +-- model.py             # BGE model loader; encode_passages() / encode_query()
+|   +-- store.py             # Chroma collection management + query_collection()
+|
++-- scraped_docs/            # Scraper + chunker output (git-ignored)
+|   +-- clean_text/          # One .md file per scraped page
+|   +-- raw_html/            # Raw HTML snapshots (for debugging)
+|   +-- chunks.jsonl         # Chunker output -- one JSON line per chunk
+|   +-- manifest.json        # Scraper run log -- one entry per URL
+|   +-- scraper.log          # Full debug log
+|
++-- vector_db/               # Chroma persistent vector store (git-ignored)
 ```
 
 ---
@@ -90,6 +100,30 @@ python chunk.py --dry-run --verbose
 ```
 
 Output: `scraped_docs/chunks.jsonl` — one JSON object per chunk, ready to embed.
+
+### 4. Embed chunks into vector DB
+
+```bash
+# Dry run first (validates model load + encoding)
+python embed.py --dry-run
+
+# Full run: embed all chunks and store in Chroma
+python embed.py
+
+# Re-run after adding new scraped docs (idempotent -- no duplicates)
+python embed.py
+```
+
+Output: `vector_db/` — Chroma persistent store with 1,334 document vectors.
+
+### 5. Test retrieval quality
+
+```bash
+python test_retrieval.py
+```
+
+Runs 3 questions across different topic areas and prints top-3 results with
+distance scores. Verify results look on-topic before proceeding to Stage 5.
 
 ---
 
@@ -410,6 +444,8 @@ One JSON object per line. This is the primary input to the embedding stage.
 | `pyyaml` | >=6.0 | Both | YAML config file parsing |
 | `langchain-text-splitters` | >=0.3 | Chunker | MarkdownHeaderTextSplitter + RecursiveCharacterTextSplitter |
 | `tiktoken` | >=0.7 | Chunker | Token counting with cl100k_base encoding |
+| `sentence-transformers` | >=3.0 | Embedder | Local BGE model inference |
+| `chromadb` | >=0.5 | Embedder | Local persistent vector database |
 
 ```bash
 pip install -r requirements.txt
@@ -422,22 +458,36 @@ pip install -r requirements.txt
 ```
 [DONE]  Stage 1 -- Scraper     ->  scraped_docs/clean_text/*.md
 [DONE]  Stage 2 -- Chunker     ->  scraped_docs/chunks.jsonl
-[NEXT]  Stage 3 -- Embedder    ->  embed each chunk (OpenAI / Cohere / local model)
-[NEXT]  Stage 4 -- Vector DB   ->  upsert vectors + metadata (Pinecone / Chroma / Qdrant)
-[NEXT]  Stage 5 -- Chat API    ->  FastAPI endpoint: query -> retrieve -> LLM -> answer
-[NEXT]  Stage 6 -- Frontend    ->  Chat UI (React / Next.js)
+[DONE]  Stage 3 -- Embedder    ->  BAAI/bge-small-en-v1.5, 384-dim, local CPU
+[DONE]  Stage 4 -- Vector DB   ->  Chroma persistent store, vector_db/
+[NEXT]  Stage 5 -- Chat API    ->  DeepSeek generation + retrieved context
+[NEXT]  Stage 6 -- Frontend    ->  Chat UI
+[LATER] Upgrade -- Bedrock      ->  Amazon Titan Embed v2 + Claude Haiku
 ```
 
-### Stage 3 (Embedder) — design notes
+### Stage 3+4 (Embedder & Vector DB) — implemented
 
-`chunks.jsonl` is the direct input. Each line = one embedding vector.
-Use `chunk_id` as the vector ID for upserts — idempotent and safe to re-run.
+**Model:** `BAAI/bge-small-en-v1.5` via `sentence-transformers`
+- Free, runs on CPU, ~130 MB one-time download
+- 384-dimensional vectors, normalized for cosine similarity
+- Asymmetric encoding: `encode_passages()` (no prefix) for storage,
+  `encode_query()` (BGE prefix) for search — kept strictly separate
 
-Recommended embedding models:
+**Vector DB:** Chroma (persistent, local)
+- Stored in `vector_db/` on disk
+- `chunk_id` used as document ID — re-runs are idempotent (upsert, no duplicates)
+- Each record stores: text, source_url, source_file, headings, token_count
 
-| Provider | Model | Dimensions | Notes |
-|----------|-------|-----------|-------|
-| OpenAI | `text-embedding-3-small` | 1536 | Best quality/cost ratio |
-| OpenAI | `text-embedding-3-large` | 3072 | Highest accuracy |
-| Cohere | `embed-english-v3.0` | 1024 | Good multilingual support |
-| Local | `BAAI/bge-small-en-v1.5` | 384 | Runs on CPU, no API cost |
+**Retrieval test results (3 topic areas, all passed):**
+
+| Question | Top result | Distance |
+|----------|-----------|----------|
+| How do agents call tools? | guides/tools | 0.2370 |
+| What authentication methods does GPT support? | actions/authentication | 0.2613 |
+| How does fine-tuning work? | guides/fine-tuning-best-practices | 0.2531 |
+
+All distances < 0.30 — strong matches. Production-ready for Stage 5.
+
+**Planned upgrade (Stage 7+):** Swap to Amazon Bedrock Titan Embed v2
+(1024-dim, API-based) when deploying to cloud. Code change confined to
+`embedder/model.py`.

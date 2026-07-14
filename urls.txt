@@ -1,0 +1,5 @@
+# Open AI Core Concepts Docs
+https://developers.openai.com/api/docs
+
+# AWS Docs
+https://docs.aws.amazon.com/AmazonS3/latest/userguide/Welcome.html

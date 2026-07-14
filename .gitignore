@@ -1,0 +1,38 @@
+# ── Credentials (NEVER commit) ───────────────────────────────────────────────
+creds.txt
+.env
+*.key
+secrets.yaml
+
+# ── Generated pipeline output ─────────────────────────────────────────────────
+scraped_docs/
+vector_db/
+
+# ── Model cache (sentence-transformers downloads here) ────────────────────────
+.cache/
+models/
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# ── Virtual environments ──────────────────────────────────────────────────────
+venv/
+.venv/
+env/
+.env/
+
+# ── IDE / OS ──────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db

@@ -1,0 +1,116 @@
+# ============================================================
+# scraper_config.yaml  —  Web Scraper Configuration
+# ============================================================
+# All values here are DEFAULTS.
+# Any matching CLI flag will override these at runtime.
+# e.g.  --delay 2.0  overrides fetch.delay below.
+# ============================================================
+
+# ------------------------------------------------------------------
+# Output settings
+# ------------------------------------------------------------------
+output:
+  # Root directory for all scraper output
+  dir: "scraped_docs"
+
+  # File format for cleaned content: "md" (recommended for RAG) or "txt"
+  format: "md"
+
+  # Save a raw HTML snapshot for every page (useful for debugging)
+  save_raw_html: true
+
+# ------------------------------------------------------------------
+# Fetch settings
+# ------------------------------------------------------------------
+fetch:
+  # Seconds to wait between consecutive requests (be polite!)
+  delay: 1.0
+
+  # HTTP request timeout in seconds
+  timeout: 20
+
+  # Number of HTTP-level retries on transient failures (429, 5xx)
+  retries: 3
+
+  # Respect robots.txt by default (set to false only if you have permission)
+  respect_robots: false
+
+  # Custom User-Agent string (leave blank to rotate built-in UA pool)
+  user_agent: ""
+
+# ------------------------------------------------------------------
+# Crawl settings  (only used in --seed / crawl mode)
+# ------------------------------------------------------------------
+crawl:
+  # Maximum BFS depth to follow links.
+  # 0 = fetch each URL as a single page (no link following) — safe default
+  # 1 = fetch each URL + all pages it links to
+  # 2 = fetch seed + links + links-of-links
+  #
+  # Works in ALL modes:
+  #   --seed URL      : crawl from one starting point
+  #   --url-file / --urls : each URL becomes its own seed (crawled independently)
+  depth: 0
+
+  # Restrict link-following to the same domain as the seed URL
+  same_domain_only: true
+
+  # Path prefix scope — restrict crawl to the first N path segments of the seed URL.
+  # 0 = domain only (e.g. docs.aws.amazon.com  — everything on the domain)
+  # 1 = first segment (e.g. docs.aws.amazon.com/AmazonS3  — S3 only)
+  # 2 = first two segments (e.g. docs.aws.amazon.com/AmazonS3/latest)
+  #
+  # Example: seed = https://docs.aws.amazon.com/AmazonS3/latest/userguide/Welcome.html
+  #   path_prefix_depth: 0  → crawls all of docs.aws.amazon.com (Glue, EC2, etc.)
+  #   path_prefix_depth: 1  → crawls only docs.aws.amazon.com/AmazonS3/*
+  #   path_prefix_depth: 2  → crawls only docs.aws.amazon.com/AmazonS3/latest/*
+  path_prefix_depth: 1
+
+  # URL patterns to skip during crawl (Python regex, case-insensitive)
+  # Example: skip login, search, and static asset paths
+  exclude_patterns:
+    - "/login"
+    - "/search"
+    - "/register"
+    - "/logout"
+    - "\\.pdf$"
+    - "\\.zip$"
+    - "\\.png$"
+    - "\\.jpg$"
+    - "\\.gif$"
+
+# ------------------------------------------------------------------
+# Resume / deduplication
+# ------------------------------------------------------------------
+resume:
+  # Skip URLs already present in manifest.json on subsequent runs
+  enabled: true
+
+# ------------------------------------------------------------------
+# Logging
+# ------------------------------------------------------------------
+logging:
+  # Console log level: DEBUG | INFO | WARNING | ERROR
+  console_level: "INFO"
+
+  # File log level (scraper.log inside output.dir)
+  file_level: "DEBUG"
+
+# ------------------------------------------------------------------
+# Chunker settings
+# ------------------------------------------------------------------
+chunker:
+  # Directory containing scraped .md / .txt files
+  input_dir: "scraped_docs/clean_text"
+
+  # Output file — one JSON line per chunk
+  output_file: "scraped_docs/chunks.jsonl"
+
+  # Max tokens per chunk (cl100k_base / tiktoken approximation)
+  chunk_size: 512
+
+  # Overlap tokens carried from the end of the previous chunk
+  chunk_overlap: 64
+
+  # Discard chunks shorter than this many tokens (noise filter)
+  min_chunk_tokens: 20

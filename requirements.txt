@@ -1,0 +1,14 @@
+# Web Scraper — Trafilatura
+# Core scraping stack
+trafilatura>=1.8
+requests>=2.31
+beautifulsoup4>=4.12
+lxml>=5.0
+
+# Nice-to-have (graceful fallback if missing)
+colorama>=0.4
+pyyaml>=6.0
+
+# Chunker — LangChain text splitters
+langchain-text-splitters>=0.3
+tiktoken>=0.7

@@ -6,7 +6,7 @@ A modular pipeline that turns documentation websites into embedding-ready chunks
 Web Pages  -->  [Scraper]  -->  clean_text/*.md  -->  [Chunker]  -->  chunks.jsonl  -->  [Embedder -> Vector DB -> LLM]
 ```
 
-**Done:** Scraper + Chunker + Embedder + Vector DB + Chat API | **Next:** Frontend
+**Done:** Scraper + Chunker + Embedder + Vector DB + Chat CLI + HTTP API | **Next:** Frontend UI
 
 ---
 
@@ -17,11 +17,12 @@ Web Pages  -->  [Scraper]  -->  clean_text/*.md  -->  [Chunker]  -->  chunks.jso
 3. [Stage 1 — Scraper](#stage-1--scraper)
 4. [Stage 2 — Chunker](#stage-2--chunker)
 5. [Stage 3+4 — Embedder & Vector DB](#stage-34--embedder--vector-db)
-6. [Stage 5 — Chat API](#stage-5--chat-api)
-7. [Configuration Reference](#configuration-reference)
-8. [Output File Formats](#output-file-formats)
-9. [Dependencies](#dependencies)
-10. [Roadmap](#roadmap)
+6. [Stage 5 — Chat CLI](#stage-5--chat-api)
+7. [Stage 6a — HTTP API](#stage-6a--http-api)
+8. [Configuration Reference](#configuration-reference)
+9. [Output File Formats](#output-file-formats)
+10. [Dependencies](#dependencies)
+11. [Roadmap](#roadmap)
 
 ---
 
@@ -482,8 +483,9 @@ pip install -r requirements.txt
 [DONE]  Stage 2 -- Chunker     ->  scraped_docs/chunks.jsonl
 [DONE]  Stage 3 -- Embedder    ->  BAAI/bge-small-en-v1.5, 384-dim, local CPU
 [DONE]  Stage 4 -- Vector DB   ->  Chroma persistent store, vector_db/
-[DONE]  Stage 5 -- Chat API    ->  Groq Llama 3.3 70B, streaming, citations
-[NEXT]  Stage 6 -- Frontend    ->  Chat UI (React / Next.js)
+[DONE]  Stage 5 -- Chat CLI    ->  python chat.py, streaming, citations
+[DONE]  Stage 6a -- HTTP API   ->  FastAPI, SSE streaming, /chat/stream
+[NEXT]  Stage 6b -- Frontend   ->  Chat UI (Vite + React)
 [LATER] Upgrade -- Bedrock      ->  Amazon Titan Embed v2 + Claude Haiku
 ```
 
@@ -593,3 +595,83 @@ Requires `.env` file in the project root:
 GROQ_API_KEY=gsk_...
 ```
 Get a free key at [console.groq.com](https://console.groq.com).
+
+---
+
+## Stage 6a — HTTP API
+
+### Run
+
+```bash
+uvicorn api.main:app --reload --port 8000
+```
+
+API auto-docs available at http://localhost:8000/docs
+
+### Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/health` | Liveness check + corpus size |
+| `GET` | `/models` | Available Groq chat model IDs |
+| `POST` | `/chat/stream` | SSE stream: sources → tokens → done |
+
+### `POST /chat/stream` — Request body
+
+```json
+{
+  "question":    "How do agents call tools?",
+  "top_k":       5,
+  "threshold":   0.38,
+  "model":       "llama-3.3-70b-versatile",
+  "temperature": 0.2
+}
+```
+
+### SSE Event stream
+
+```
+data: {"type": "sources", "data": [{"index": 1, "url": "...", "distance": 0.237, ...}]}
+data: {"type": "token",   "data": "Agents "}
+data: {"type": "token",   "data": "call tools "}
+data: {"type": "done"}
+```
+
+### Package structure
+
+```
+api/
+├── __init__.py          # re-exports app
+├── main.py              # app factory, CORS, startup warmup, router mounts
+├── config.py            # pydantic-settings; reads .env + env vars
+├── dependencies.py      # FastAPI DI: singleton model + Chroma collection
+├── routers/
+│   ├── health.py          # GET /health
+│   ├── models.py          # GET /models
+│   └── chat.py            # POST /chat/stream (SSE)
+└── schemas/
+    └── chat.py            # ChatRequest, SourceChunk, StreamEvent
+```
+
+### Deployment (Railway / Render)
+
+1. Set env var `GROQ_API_KEY` on the host platform
+2. Set `FRONTEND_URL` to your Vercel frontend URL (for CORS)
+3. Start command: `uvicorn api.main:app --host 0.0.0.0 --port $PORT`
+
+Or use the included `Procfile` which Railway/Render pick up automatically.
+
+### Verification
+
+```bash
+# Health
+curl http://localhost:8000/health
+
+# Models
+curl http://localhost:8000/models
+
+# Stream (in-scope question)
+curl -X POST http://localhost:8000/chat/stream \
+  -H "Content-Type: application/json" \
+  -d '{"question":"How do agents call tools?","top_k":3,"threshold":0.38,"model":"llama-3.3-70b-versatile","temperature":0.2}'
+```

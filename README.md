@@ -30,7 +30,7 @@ Web Pages  -->  [Scraper]  -->  clean_text/*.md  -->  [Chunker]  -->  chunks.jso
 ```
 Doc Chatbot/
 |
-+-- main.py                  # Scraper CLI entry point
++-- scrape.py                # Scraper CLI entry point
 +-- chunk.py                 # Chunker CLI entry point
 +-- embed.py                 # Embedder CLI entry point
 +-- chat.py                  # Chat CLI entry point  <-- talk to your docs here
@@ -89,10 +89,10 @@ pip install -r requirements.txt
 
 ```bash
 # Scrape a fixed list of URLs
-python main.py --url-file urls.txt
+python scrape.py --url-file urls.txt
 
 # Or crawl from a seed URL (follows links 1 level deep)
-python main.py --seed https://docs.example.com/ --depth 1
+python scrape.py --seed https://docs.example.com/ --depth 1
 ```
 
 ### 3. Chunk the clean text
@@ -170,7 +170,7 @@ storage.py   -- Saves clean text as slug-named .md or .txt
                 Updates manifest.json atomically (write-then-rename)
 ```
 
-### Scraper CLI (`main.py`)
+### Scraper CLI (`scrape.py`)
 
 **Input mode — pick exactly one:**
 
@@ -209,16 +209,16 @@ storage.py   -- Saves clean text as slug-named .md or .txt
 
 ```bash
 # Flat fetch, markdown output
-python main.py --urls https://docs.openai.com/api https://docs.openai.com/guides
+python scrape.py --urls https://docs.openai.com/api https://docs.openai.com/guides
 
 # From a URL file, 2-second delay
-python main.py --url-file urls.txt --delay 2.0
+python scrape.py --url-file urls.txt --delay 2.0
 
 # Crawl 2 levels deep from a seed
-python main.py --seed https://docs.python.org/3/ --depth 2
+python scrape.py --seed https://docs.python.org/3/ --depth 2
 
 # Force re-scrape (ignore manifest)
-python main.py --url-file urls.txt --no-resume
+python scrape.py --url-file urls.txt --no-resume
 ```
 
 ### Scraper Module Reference

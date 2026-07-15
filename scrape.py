@@ -10,9 +10,9 @@ Modes:
   --seed        Crawl from a seed URL up to --depth levels deep
 
 Usage examples:
-  python main.py --urls https://docs.python.org/3/library/pathlib.html
-  python main.py --url-file my_urls.txt --format md --delay 1.5
-  python main.py --seed https://docs.python.org/3/ --depth 2 --same-domain
+  python scrape.py --urls https://docs.python.org/3/library/pathlib.html
+  python scrape.py --url-file my_urls.txt --format md --delay 1.5
+  python scrape.py --seed https://docs.python.org/3/ --depth 2 --same-domain
 """
 
 import argparse
@@ -24,7 +24,7 @@ import sys
 # ---------------------------------------------------------------------------
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        prog="scraper",
+        prog="scrape",
         description="Trafilatura-based web content scraper for RAG pipelines.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-main.py — Web Scraper CLI
-=========================
+scrape.py — Web Scraper CLI
+===========================
 Uses trafilatura + requests to extract clean content from websites.
 
 Modes:

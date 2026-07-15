@@ -133,3 +133,25 @@ embedder:
 
   # Chunks to encode per batch
   batch_size: 64
+
+# ------------------------------------------------------------------
+# Chat settings
+# ------------------------------------------------------------------
+chat:
+  # Groq model to use for answer generation
+  model: "llama-3.3-70b-versatile"
+
+  # Number of chunks to retrieve per question
+  top_k: 5
+
+  # Sampling temperature — lower = more factual/consistent
+  temperature: 0.2
+
+  # Max output tokens for the answer
+  max_tokens: 1024
+
+  # Distance threshold — chunks beyond this are dropped before sending to LLM
+  # Calibrated from 11-query test:
+  #   IN scope  (docs questions): distances 0.21 – 0.29
+  #   OUT scope (unrelated):      distances 0.42 – 0.49
+  distance_threshold: 0.38

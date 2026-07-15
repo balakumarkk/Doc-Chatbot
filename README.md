@@ -6,7 +6,7 @@ A modular pipeline that turns documentation websites into embedding-ready chunks
 Web Pages  -->  [Scraper]  -->  clean_text/*.md  -->  [Chunker]  -->  chunks.jsonl  -->  [Embedder -> Vector DB -> LLM]
 ```
 
-**Done:** Scraper + Chunker + Embedder + Vector DB | **Next:** Chat API -> Frontend
+**Done:** Scraper + Chunker + Embedder + Vector DB + Chat API | **Next:** Frontend
 
 ---
 
@@ -17,10 +17,11 @@ Web Pages  -->  [Scraper]  -->  clean_text/*.md  -->  [Chunker]  -->  chunks.jso
 3. [Stage 1 — Scraper](#stage-1--scraper)
 4. [Stage 2 — Chunker](#stage-2--chunker)
 5. [Stage 3+4 — Embedder & Vector DB](#stage-34--embedder--vector-db)
-6. [Configuration Reference](#configuration-reference)
-7. [Output File Formats](#output-file-formats)
-8. [Dependencies](#dependencies)
-9. [Roadmap](#roadmap)
+6. [Stage 5 — Chat API](#stage-5--chat-api)
+7. [Configuration Reference](#configuration-reference)
+8. [Output File Formats](#output-file-formats)
+9. [Dependencies](#dependencies)
+10. [Roadmap](#roadmap)
 
 ---
 
@@ -32,9 +33,12 @@ Doc Chatbot/
 +-- main.py                  # Scraper CLI entry point
 +-- chunk.py                 # Chunker CLI entry point
 +-- embed.py                 # Embedder CLI entry point
++-- chat.py                  # Chat CLI entry point  <-- talk to your docs here
 +-- test_retrieval.py        # Retrieval quality test (3 topic areas)
++-- test_threshold.py        # Distance threshold calibration (11 queries)
 +-- scraper_config.yaml      # Unified config for all stages
 +-- requirements.txt         # All Python dependencies
++-- .env                     # API keys (git-ignored — never commit)
 +-- urls.txt                 # (optional) URL list for the scraper
 |
 +-- scraper/                 # Scraper package
@@ -52,9 +56,14 @@ Doc Chatbot/
 |   +-- storage.py           # Write ChunkRecord -> chunks.jsonl; URL lookup
 |
 +-- embedder/                # Embedder package
-|   +-- __init__.py          # Public API: encode_passages, encode_query, get_collection, ...
+|   +-- __init__.py          # Public API: encode_passages, encode_query, ...
 |   +-- model.py             # BGE model loader; encode_passages() / encode_query()
 |   +-- store.py             # Chroma collection management + query_collection()
+|
++-- chat/                    # Chat package
+|   +-- __init__.py          # Public API: retrieve, build_prompt, stream_answer
+|   +-- retriever.py         # Embedder wrapper with distance threshold filtering
+|   +-- llm.py               # Groq client, prompt builder, streaming
 |
 +-- scraped_docs/            # Scraper + chunker output (git-ignored)
 |   +-- clean_text/          # One .md file per scraped page
@@ -124,6 +133,19 @@ python test_retrieval.py
 
 Runs 3 questions across different topic areas and prints top-3 results with
 distance scores. Verify results look on-topic before proceeding to Stage 5.
+
+### 6. Chat with your documentation
+
+```bash
+# Interactive mode — ask anything
+python chat.py
+
+# Single question
+python chat.py --question "How do agents call tools?"
+
+# Adjust retrieval depth
+python chat.py --top-k 3
+```
 
 ---
 
@@ -460,8 +482,8 @@ pip install -r requirements.txt
 [DONE]  Stage 2 -- Chunker     ->  scraped_docs/chunks.jsonl
 [DONE]  Stage 3 -- Embedder    ->  BAAI/bge-small-en-v1.5, 384-dim, local CPU
 [DONE]  Stage 4 -- Vector DB   ->  Chroma persistent store, vector_db/
-[NEXT]  Stage 5 -- Chat API    ->  DeepSeek generation + retrieved context
-[NEXT]  Stage 6 -- Frontend    ->  Chat UI
+[DONE]  Stage 5 -- Chat API    ->  Groq Llama 3.3 70B, streaming, citations
+[NEXT]  Stage 6 -- Frontend    ->  Chat UI (React / Next.js)
 [LATER] Upgrade -- Bedrock      ->  Amazon Titan Embed v2 + Claude Haiku
 ```
 
@@ -491,3 +513,83 @@ All distances < 0.30 — strong matches. Production-ready for Stage 5.
 **Planned upgrade (Stage 7+):** Swap to Amazon Bedrock Titan Embed v2
 (1024-dim, API-based) when deploying to cloud. Code change confined to
 `embedder/model.py`.
+
+---
+
+## Stage 5 — Chat API
+
+### How It Works
+
+```
+User question
+     |
+     v
+encode_query()          # BGE prefix applied — asymmetric encoding
+     |
+     v
+query_collection()      # top-5 chunks from Chroma, filtered by distance <= 0.38
+     |
+     v
+build_prompt()          # numbered context blocks + grounded system prompt
+     |
+     v
+Groq API (streaming)    # llama-3.3-70b-versatile
+     |
+     v
+Answer + cited URLs     # [1], [2]... inline citations + source list
+```
+
+### Chat CLI (`chat.py`)
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--question TEXT` | — | Single question mode (default: interactive loop) |
+| `--top-k INT` | `5` | Chunks to retrieve |
+| `--threshold FLOAT` | `0.38` | Distance cutoff (calibrated from 11-query test) |
+| `--model TEXT` | `llama-3.3-70b-versatile` | Groq model ID |
+| `--temperature FLOAT` | `0.2` | Sampling temperature |
+| `--no-stream` | false | Print full answer at once |
+| `--no-sources` | false | Hide source URLs |
+
+**Usage examples:**
+
+```bash
+# Interactive chat session
+python chat.py
+
+# Single question, streaming
+python chat.py --question "How does fine-tuning work?"
+
+# Tighter retrieval (fewer, more relevant chunks)
+python chat.py --question "..." --top-k 3 --threshold 0.30
+```
+
+### Distance Threshold: 0.38
+
+Calibrated empirically from 11 queries across 3 categories:
+
+| Category | Distance range | Verdict |
+|----------|---------------|--------|
+| IN scope (docs questions) | 0.21 – 0.29 | ✅ Pass |
+| EDGE (tech, not in corpus) | 0.32 – 0.43 | Mixed (LLM handles) |
+| OUT scope (unrelated) | 0.42 – 0.49 | ❌ Blocked |
+
+Chunks beyond 0.38 are dropped. If *all* chunks are dropped, the LLM
+receives empty context and responds: *"I don't have enough information in
+the documentation to answer that."*
+
+### Verification Results
+
+| Test | Result |
+|------|--------|
+| `"How do agents call tools?"` | ✅ Grounded answer, 5 citations |
+| `"How does fine-tuning work?"` | ✅ Grounded answer, relevant sources |
+| `"What is the boiling point of mercury?"` | ✅ "I don't know" (no hallucination) |
+
+### Setup
+
+Requires `.env` file in the project root:
+```
+GROQ_API_KEY=gsk_...
+```
+Get a free key at [console.groq.com](https://console.groq.com).

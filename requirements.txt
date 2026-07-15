@@ -16,3 +16,7 @@ tiktoken>=0.7
 # Embedder — local BGE model + Chroma vector DB
 sentence-transformers>=3.0
 chromadb>=0.5
+
+# Chat — Groq API (OpenAI-compatible) + env loading
+openai>=1.0
+python-dotenv>=1.0
